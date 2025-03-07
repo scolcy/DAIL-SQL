@@ -12,7 +12,7 @@ python generate_question.py \
 --example_type QA \
 --selector_type  EUCDISQUESTIONMASK
 
-echo "generate SQL by GPT-4 for EUCDISMASKPRESKLSIMTHR as the pre-generated SQL query"
+echo "generate SQL by GPT-4 for EUCDISQUESTIONMASK as the pre-generated SQL query"
 python ask_llm.py \
 --openai_api_key $1  \
 --model gpt-4 \
