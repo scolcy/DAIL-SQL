@@ -9,6 +9,7 @@ class BasicDataset(object):
     def __init__(self, path_data, pre_test_result=None):
         self.path_data = os.path.join(path_data, self.name)
         self.path_db = os.path.join(self.path_data, "database")
+        # self.path_db = os.path.join(self.path_data, "test_database")
         self.test_json = os.path.join(self.path_data, self.test_json)
         self.test_gold = os.path.join(self.path_data, self.test_gold)
         self.train_json = os.path.join(self.path_data, self.train_json)
@@ -210,11 +211,11 @@ class BasicDataset(object):
 
 class SpiderDataset(BasicDataset):
     name = "spider"
-    test_json = "dev.json"
-    test_gold = "dev_gold.sql"
+    test_json = "test.json"
+    test_gold = "test_gold.sql"
     train_json = "train_spider_and_others.json"
     train_gold = "train_gold.sql"
-    table_json = "tables.json"
+    table_json = "test_tables.json"
     mini_test_index_json = "mini_dev_index.json"
 
 

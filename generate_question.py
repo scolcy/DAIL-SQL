@@ -72,7 +72,6 @@ if __name__ == '__main__':
 
     # select the prompt
     prompt = prompt_factory(args.prompt_repr, args.k_shot, args.example_type, args.selector_type)(data=data, tokenizer=args.tokenizer)
-
     # format all questions
     questions = list()
     token_cnt = 0

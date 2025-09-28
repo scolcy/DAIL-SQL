@@ -51,6 +51,8 @@ class LLM:
     GPT_35_TURBO_16K = "gpt-3.5-turbo-16k"
     GPT_35_TURBO_0301 = "gpt-3.5-turbo-0301"
     GPT_4 = "gpt-4"
+    QWEN3_MAX = "qwen3-max"
+    QWEN_FLASH = "qwen-flash"
 
     # LLMs that use openai completion api
     TASK_COMPLETIONS = [
@@ -64,7 +66,9 @@ class LLM:
         GPT_35_TURBO_0613,
         GPT_35_TURBO_16K,
         GPT_35_TURBO_0301,
-        GPT_4
+        GPT_4,
+        QWEN3_MAX,
+        QWEN_FLASH
     ]
 
     # LLMs that can run in batch
@@ -86,4 +90,4 @@ class LLM:
     # local LLMs
     LLAMA_7B = "llama-7b"
     ALPACA_7B = "alpaca-7b"
-    # TONG_YI_QIAN_WEN = "qwen-v1"
+    TONG_YI_QIAN_WEN = "qwen3-max"

@@ -8,7 +8,7 @@ class BasicPrompt(object):
         pass
 
     def format_target(self, example: dict):
-        return self.format_question(example) + "\nSELECT "
+        return self.format_question(example) + "\nSELECT Only output the content after select without any other explanation"
 
     def format_question(self, example: dict):
         raise NotImplementedError()

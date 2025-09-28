@@ -2,10 +2,9 @@ import argparse
 import os
 import json
 
-import openai
 from tqdm import tqdm
 
-from llm.chatgpt import init_chatgpt, ask_llm
+from llm.chatgpt import ask_llm
 from utils.enums import LLM
 from torch.utils.data import DataLoader
 
@@ -22,7 +21,9 @@ if __name__ == '__main__':
     parser.add_argument("--model", type=str, choices=[LLM.TEXT_DAVINCI_003, 
                                                       LLM.GPT_35_TURBO,
                                                       LLM.GPT_35_TURBO_0613,
-                                                      # LLM.TONG_YI_QIAN_WEN,
+                                                      LLM.TONG_YI_QIAN_WEN,
+                                                      LLM.QWEN3_MAX,
+                                                       LLM.QWEN_FLASH,
                                                       LLM.GPT_35_TURBO_16K,
                                                       LLM.GPT_4],
                         default=LLM.GPT_35_TURBO)
@@ -31,7 +32,7 @@ if __name__ == '__main__':
     parser.add_argument("--temperature", type=float, default=0)
     parser.add_argument("--mini_index_path", type=str, default="")
     parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--n", type=int, default=5, help="Size of self-consistent set")
+    parser.add_argument("--n", type=int, default=1, help="Size of self-consistent set")
     parser.add_argument("--db_dir", type=str, default="dataset/spider/database")
     args = parser.parse_args()
 
@@ -40,12 +41,19 @@ if __name__ == '__main__':
            args.model not in LLM.BATCH_FORWARD and args.batch_size == 1, \
         f"{args.model} doesn't support batch_size > 1"
 
+    # Check n parameter for specific models
+    if args.model == LLM.TONG_YI_QIAN_WEN:
+        max_n = 4
+        if args.n > max_n:
+            print(f"Warning: {args.model} only supports n in range [1, {max_n}]. Setting n to {max_n}.")
+            args.n = max_n
+
     questions_json = json.load(open(os.path.join(args.question, QUESTION_FILE), "r"))
     questions = [_["prompt"] for _ in questions_json["questions"]]
     db_ids = [_["db_id"] for _ in questions_json["questions"]]
 
-    # init openai api
-    init_chatgpt(args.openai_api_key, args.openai_group_id, args.model)
+    # For new openai>=1.0.0, we don't need to initialize in this way
+    # The API key will be passed directly to the ask_llm function
 
     if args.start_index == 0:
         mode = "w"
@@ -69,10 +77,14 @@ if __name__ == '__main__':
             if i >= args.end_index:
                 break
             try:
-                res = ask_llm(args.model, batch, args.temperature, args.n)
-            except openai.error.InvalidRequestError:
-                print(f"The {i}-th question has too much tokens! Return \"SELECT\" instead")
-                res = ""
+                res = ask_llm(args.model, batch, args.temperature, args.n, args.openai_api_key)
+            except Exception as e:
+                if "invalid request" in str(e).lower() or "too many tokens" in str(e).lower():
+                    print(f"The {i}-th question has too much tokens! Return \"SELECT\" instead")
+                    res = {"total_tokens": 0, "response": ["SELECT"]}
+                else:
+                    print(f"Error processing question {i}: {e}")
+                    res = {"total_tokens": 0, "response": ["SELECT"]}
 
             # parse result
             token_cnt += res["total_tokens"]
@@ -111,4 +123,4 @@ if __name__ == '__main__':
 
                     for sql in final_sqls:
                         f.write(sql + "\n")
-
+            f.flush()
