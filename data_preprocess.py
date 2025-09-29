@@ -13,18 +13,29 @@ from utils.datasets.spider import load_tables
 # from dataset.process.preprocess_kaggle import gather_questions
 
 
-def schema_linking_producer(test, train, table, db, dataset_dir, compute_cv_link=True):
+def schema_linking_producer(test, train, table, db, dataset_dir, compute_cv_link=True, test_only=False):
 
     # load data
     test_data = json.load(open(os.path.join(dataset_dir, test)))
-    train_data = json.load(open(os.path.join(dataset_dir, train)))
+    if not test_only:
+        train_data = json.load(open(os.path.join(dataset_dir, train)))
+    else:
+        train_data = []
 
     # load schemas
-    schemas, _ = load_tables([os.path.join(dataset_dir, table)])
+    # For test data, use test_tables.json if it exists
+    if "test" in test and os.path.exists(os.path.join(dataset_dir, "test_tables.json")):
+        schemas, _ = load_tables([os.path.join(dataset_dir, "test_tables.json")])
+    else:
+        schemas, _ = load_tables([os.path.join(dataset_dir, table)])
 
     # Backup in-memory copies of all the DBs and create the live connections
+    # Use test_database for test data if it exists
     for db_id, schema in tqdm(schemas.items(), desc="DB connections"):
-        sqlite_path = Path(dataset_dir) / db / db_id / f"{db_id}.sqlite"
+        if "test" in test and os.path.exists(os.path.join(dataset_dir, "test_database")):
+            sqlite_path = Path(dataset_dir) / "test_database" / db_id / f"{db_id}.sqlite"
+        else:
+            sqlite_path = Path(dataset_dir) / db / db_id / f"{db_id}.sqlite"
         source: sqlite3.Connection
         with sqlite3.connect(str(sqlite_path)) as source:
             dest = sqlite3.connect(':memory:')
@@ -43,13 +54,23 @@ def schema_linking_producer(test, train, table, db, dataset_dir, compute_cv_link
             compute_cv_link=compute_cv_link)
 
     # build schema-linking
-    for data, section in zip([test_data, train_data],['test', 'train']):
-        for item in tqdm(data, desc=f"{section} section linking"):
+    if test_only:
+        # Only process test data
+        for item in tqdm(test_data, desc="test section linking"):
             db_id = item["db_id"]
             schema = schemas[db_id]
-            to_add, validation_info = linking_processor.validate_item(item, schema, section)
+            to_add, validation_info = linking_processor.validate_item(item, schema, "test")
             if to_add:
-                linking_processor.add_item(item, schema, section, validation_info)
+                linking_processor.add_item(item, schema, "test", validation_info)
+    else:
+        # Process both test and train data
+        for data, section in zip([test_data, train_data],['test', 'train']):
+            for item in tqdm(data, desc=f"{section} section linking"):
+                db_id = item["db_id"]
+                schema = schemas[db_id]
+                to_add, validation_info = linking_processor.validate_item(item, schema, section)
+                if to_add:
+                    linking_processor.add_item(item, schema, section, validation_info)
 
     # save
     linking_processor.save()
@@ -107,28 +128,36 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str, default="./dataset/spider")
     parser.add_argument("--data_type", type=str, choices=["spider", "bird"], default="spider")
+    parser.add_argument("--test_only", action="store_true", help="Only process test data")
     args = parser.parse_args()
 
     data_type = args.data_type
+    test_only = False
+    if data_type == "spider":
+        test_only = True
     if data_type == "spider":
         # merge two training split of Spider
         spider_dir = args.data_dir
         split1 = "train_spider.json"
         split2 = "train_others.json"
-        total_train = []
-        for item in json.load(open(os.path.join(spider_dir, split1))):
-            total_train.append(item)
-        for item in json.load(open(os.path.join(spider_dir, split2))):
-            total_train.append(item)
-        with open(os.path.join(spider_dir, 'train_spider_and_others.json'), 'w') as f:
-            json.dump(total_train, f)
+        if not test_only:
+            total_train = []
+            for item in json.load(open(os.path.join(spider_dir, split1))):
+                total_train.append(item)
+            for item in json.load(open(os.path.join(spider_dir, split2))):
+                total_train.append(item)
+            with open(os.path.join(spider_dir, 'train_spider_and_others.json'), 'w') as f:
+                json.dump(total_train, f)
 
         # schema-linking between questions and databases for Spider
         spider_dev = "dev.json"
+        spider_test = "test.json"
         spider_train = 'train_spider_and_others.json'
         spider_table = 'tables.json'
+        spider_test_table = 'test_tables.json'
         spider_db = 'database'
-        schema_linking_producer(spider_dev, spider_train, spider_table, spider_db, spider_dir)
+        spider_test_db = 'test_database'
+        schema_linking_producer(spider_test, spider_train, spider_test_table, spider_test_db, spider_dir, test_only=test_only)
     elif data_type == "bird":
         # schema-linking for bird with evidence
         bird_dir = './dataset/bird'
@@ -138,4 +167,4 @@ if __name__ == '__main__':
         bird_table = 'tables.json'
         bird_db = 'databases'
         ## do not compute the cv_link since it is time-consuming in the huge database in BIRD
-        schema_linking_producer(bird_dev, bird_train, bird_table, bird_db, bird_dir, compute_cv_link=False)
+        schema_linking_producer(bird_dev, bird_train, bird_table, bird_db, bird_dir, compute_cv_link=False, test_only=test_only)
