@@ -11,6 +11,13 @@ from typing import Tuple, Any, List, Set
 import sqlparse
 import tqdm
 
+# 添加新的导入
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from llm.chatgpt import ask_llm
+from utils.utils import get_sql_for_database
+import numpy as np
+
 
 # process the case of duplicated output of ChatGPT and GPT4 for SQL Representation with QA or SQLONLY Organization
 def process_duplication(sql):
@@ -211,7 +218,7 @@ def get_exec_output(
         return flag, sql_denotation
 
 
-def get_sqls(results, select_number, db_dir):
+def get_sqls(results, select_number, db_dir, model="qwen3-max", api_key=None, original_questions=None):
     db_ids = []
     all_p_sqls = []
     for item in results:
@@ -223,11 +230,17 @@ def get_sqls(results, select_number, db_dir):
                 break
         all_p_sqls.append(p_sqls)
     chosen_p_sqls = []
+    
+    # 全局初始化SentenceTransformer模型，避免重复加载
+    sentence_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2') if original_questions and api_key else None
+    
     for i, db_id in enumerate(tqdm.tqdm(db_ids)):
         p_sqls = all_p_sqls[i]
         db_path = f"{db_dir}/{db_id}/{db_id}"
         cluster_sql_list = []
         map_sql2denotation = {}
+        valid_sqls = []  # 存储可以成功执行的SQL
+        
         for sql in p_sqls:
             flag, denotation = get_exec_output(
                 db_path,
@@ -236,6 +249,7 @@ def get_sqls(results, select_number, db_dir):
             if flag == "exception":
                 continue
             map_sql2denotation[sql] = denotation
+            valid_sqls.append(sql)  # 添加到有效SQL列表
             denotation_match = False
 
             for id, cluster in enumerate(cluster_sql_list):
@@ -246,11 +260,59 @@ def get_sqls(results, select_number, db_dir):
                     break
             if not denotation_match:
                 cluster_sql_list.append([sql])
+        
         cluster_sql_list.sort(key=lambda x: len(x), reverse=True)
-        if not cluster_sql_list:
-            chosen_p_sqls.append(p_sqls[0])
+        
+        # 如果有原始问题且有有效的SQL，则使用LLM反推问题并计算相似度
+        if original_questions and valid_sqls and api_key:
+            original_question = original_questions[i] if i < len(original_questions) else ""
+            
+            # 批量使用LLM反推所有SQL对应的问题
+            reverse_questions = []
+            prompts = []
+            for sql in valid_sqls:
+                prompt = f"Given the database schema and SQL query below, what question might have been asked to generate this query?\n\nSQL: {sql}\nQuestion:"
+                prompts.append(prompt)
+            
+            # 批量处理LLM请求（如果API支持批处理）
+            try:
+                # 尝试批量发送请求
+                response = ask_llm(model, prompts, temperature=0.0, n=1, api_key=api_key)
+                reverse_questions = response["response"] if response["response"] else ["" for _ in prompts]
+            except Exception as e:
+                print(f"Error asking LLM to reverse engineer questions: {e}")
+                # 回退到逐个处理
+                for prompt in prompts:
+                    try:
+                        response = ask_llm(model, [prompt], temperature=0.0, n=1, api_key=api_key)
+                        reverse_question = response["response"][0] if response["response"] else ""
+                        reverse_questions.append(reverse_question)
+                    except Exception as e:
+                        print(f"Error asking LLM to reverse engineer question: {e}")
+                        reverse_questions.append("")
+            
+            # 计算原始问题与反推问题的相似度
+            if original_question and reverse_questions:
+                # 批量计算嵌入
+                original_embedding = sentence_model.encode([original_question])
+                reverse_embeddings = sentence_model.encode(reverse_questions)
+                similarities = cosine_similarity(original_embedding, reverse_embeddings)[0]
+                
+                # 选择相似度最高的SQL
+                best_match_idx = np.argmax(similarities)
+                chosen_p_sqls.append(valid_sqls[best_match_idx])
+            else:
+                # 如果没有原始问题或反推问题失败，回退到原来的逻辑
+                if not cluster_sql_list:
+                    chosen_p_sqls.append(p_sqls[0])
+                else:
+                    chosen_p_sqls.append(cluster_sql_list[0][0])
         else:
-            chosen_p_sqls.append(cluster_sql_list[0][0])
+            # 原来的逻辑：选择最大聚类中的第一个查询
+            if not cluster_sql_list:
+                chosen_p_sqls.append(p_sqls[0])
+            else:
+                chosen_p_sqls.append(cluster_sql_list[0][0])
 
     print("save chosen sqls and results...")
 

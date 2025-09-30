@@ -50,6 +50,7 @@ if __name__ == '__main__':
 
     questions_json = json.load(open(os.path.join(args.question, QUESTION_FILE), "r"))
     questions = [_["prompt"] for _ in questions_json["questions"]]
+    # questions = questions[0:10]
     db_ids = [_["db_id"] for _ in questions_json["questions"]]
 
     # For new openai>=1.0.0, we don't need to initialize in this way
@@ -69,6 +70,13 @@ if __name__ == '__main__':
 
     question_loader = DataLoader(questions, batch_size=args.batch_size, shuffle=False, drop_last=False)
 
+    import json
+
+    # 从文件读取数据
+    with open("D:/text2SQLProject/DAIL-SQL/dataset/spider/test.json", "r", encoding="utf-8") as test_file:
+        data = json.load(test_file)
+    # 提取question
+    only_questions = [item["question"] for item in data]
     token_cnt = 0
     with open(out_file, mode) as f:
         for i, batch in enumerate(tqdm(question_loader)):
@@ -119,7 +127,8 @@ if __name__ == '__main__':
                         'db_id': db_id,
                         'p_sqls': processed_sqls
                     }
-                    final_sqls = get_sqls([result], args.n, args.db_dir)
+
+                    final_sqls = get_sqls([result], args.n, args.db_dir, args.model, args.openai_api_key, None)
 
                     for sql in final_sqls:
                         f.write(sql + "\n")
