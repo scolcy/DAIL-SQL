@@ -1,6 +1,7 @@
 import argparse
 import os
 import json
+from datetime import datetime
 
 from tqdm import tqdm
 
@@ -29,7 +30,7 @@ if __name__ == '__main__':
                         default=LLM.GPT_35_TURBO)
     parser.add_argument("--start_index", type=int, default=0)
     parser.add_argument("--end_index", type=int, default=1000000)
-    parser.add_argument("--temperature", type=float, default=0)
+    parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--mini_index_path", type=str, default="")
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--n", type=int, default=1, help="Size of self-consistent set")
@@ -61,12 +62,15 @@ if __name__ == '__main__':
     else:
         mode = "a"
 
+    # 获取当前时间戳
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     if args.mini_index_path:
         mini_index = json.load(open(args.mini_index_path, 'r'))
         questions = [questions[i] for i in mini_index]
-        out_file = f"{args.question}/RESULTS_MODEL-{args.model}_MINI.txt"
+        out_file = f"{args.question}/RESULTS_MODEL-{args.model}_MINI_{timestamp}.txt"
     else:
-        out_file = f"{args.question}/RESULTS_MODEL-{args.model}.txt"
+        out_file = f"{args.question}/RESULTS_MODEL-{args.model}_{timestamp}.txt"
 
     question_loader = DataLoader(questions, batch_size=args.batch_size, shuffle=False, drop_last=False)
 
@@ -128,7 +132,7 @@ if __name__ == '__main__':
                         'p_sqls': processed_sqls
                     }
 
-                    final_sqls = get_sqls([result], args.n, args.db_dir, args.model, args.openai_api_key, None)
+                    final_sqls = get_sqls([result], args.n, args.db_dir, args.model, args.openai_api_key, only_questions)
 
                     for sql in final_sqls:
                         f.write(sql + "\n")
