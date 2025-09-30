@@ -3,6 +3,7 @@ import os
 import json
 from datetime import datetime
 
+from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 from llm.chatgpt import ask_llm
@@ -82,6 +83,8 @@ if __name__ == '__main__':
     # 提取question
     only_questions = [item["question"] for item in data]
     token_cnt = 0
+    # 初始化句子嵌入模型
+    sentence_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
     with open(out_file, mode) as f:
         for i, batch in enumerate(tqdm(question_loader)):
             if i < args.start_index:
@@ -132,7 +135,7 @@ if __name__ == '__main__':
                         'p_sqls': processed_sqls
                     }
 
-                    final_sqls = get_sqls([result], args.n, args.db_dir, args.model, args.openai_api_key, only_questions)
+                    final_sqls = get_sqls([result], args.n, args.db_dir, args.model, args.openai_api_key, only_questions, sentence_model)
 
                     for sql in final_sqls:
                         f.write(sql + "\n")

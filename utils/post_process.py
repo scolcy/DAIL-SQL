@@ -218,7 +218,7 @@ def get_exec_output(
         return flag, sql_denotation
 
 
-def get_sqls(results, select_number, db_dir, model="qwen3-max", api_key=None, original_questions=None):
+def get_sqls(results, select_number, db_dir, model="qwen3-max", api_key=None, original_questions=None, sentence_model= None):
     db_ids = []
     all_p_sqls = []
     for item in results:
@@ -230,8 +230,7 @@ def get_sqls(results, select_number, db_dir, model="qwen3-max", api_key=None, or
                 break
         all_p_sqls.append(p_sqls)
     chosen_p_sqls = []
-    # 初始化句子嵌入模型
-    sentence_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+
     for i, db_id in enumerate(tqdm.tqdm(db_ids)):
         p_sqls = all_p_sqls[i]
         db_path = f"{db_dir}/{db_id}/{db_id}"
@@ -272,7 +271,7 @@ def get_sqls(results, select_number, db_dir, model="qwen3-max", api_key=None, or
         cluster_sql_list.sort(key=lambda x: len(x), reverse=True)
         
         # 如果有原始问题且有有效的SQL，则使用LLM反推问题并计算相似度
-        if original_questions and valid_sqls and api_key:
+        if original_questions and valid_sqls and api_key and len(valid_sqls) > 1:
             original_question = original_questions[i] if i < len(original_questions) else ""
 
             # 使用LLM反推每个SQL对应的问题
@@ -287,14 +286,14 @@ def get_sqls(results, select_number, db_dir, model="qwen3-max", api_key=None, or
                     print(f"Error asking LLM to reverse engineer question: {e}")
                     reverse_questions.append("")
             
-                # 计算原始问题与反推问题的相似度
-                original_embedding = sentence_model.encode([original_question])
-                reverse_embeddings = sentence_model.encode(reverse_questions)
-                similarities = cosine_similarity(original_embedding, reverse_embeddings)[0]
-                
-                # 选择相似度最高的SQL
-                best_match_idx = np.argmax(similarities)
-                chosen_p_sqls.append(valid_sqls[best_match_idx])
+            # 计算原始问题与反推问题的相似度
+            original_embedding = sentence_model.encode([original_question])
+            reverse_embeddings = sentence_model.encode(reverse_questions)
+            similarities = cosine_similarity(original_embedding, reverse_embeddings)[0]
+
+            # 选择相似度最高的SQL
+            best_match_idx = np.argmax(similarities)
+            chosen_p_sqls.append(valid_sqls[best_match_idx])
         else:
             # 原来的逻辑：选择最大聚类中的第一个查询
             if not cluster_sql_list:
